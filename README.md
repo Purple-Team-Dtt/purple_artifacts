@@ -89,3 +89,5 @@ Este repositorio sirve como colección de artefactos para:
 * Mantener ejemplos de referencia para experimentos o entornos de laboratorio
 
 
+### Recursos utiles
+- [RegexChecker](https://regex101.com/)
