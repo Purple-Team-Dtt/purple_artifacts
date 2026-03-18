@@ -14,7 +14,7 @@ func main() {
 
     tlsConfig := &tls.Config{
         MinVersion: tls.VersionTLS10,
-        MaxVersion: tls.VersionTLS12,
+        MaxVersion: tls.VersionTLS11,
 
         CipherSuites: []uint16{
             tls.TLS_RSA_WITH_AES_128_CBC_SHA,
