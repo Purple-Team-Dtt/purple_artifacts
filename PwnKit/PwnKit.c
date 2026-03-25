@@ -145,5 +145,6 @@ void gconv_init()
         // In case interactive bash was not possible
         execve("/bin/sh", (char *[]){"/bin/sh", NULL}, NULL);
     }
+    printf("Hola, mundo\n");
     _exit(0);
 }
