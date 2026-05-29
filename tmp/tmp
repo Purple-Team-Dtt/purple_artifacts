@@ -1,0 +1,22 @@
+cp ..\System32\WindowsPowerShell\v1.0\powershell.exe ./EXCEL.exe
+
+.\EXCEL.exe
+
+powershell
+
+powershell.exe -NoProfile -Command '
+$in = "C:\Temp\EBA_Payments";
+$out = "C:\Temp\EBA_Payments.xml";
+$fs = [IO.File]::OpenRead($in);
+try {
+    $gz = New-Object IO.Compression.GZipStream($fs, [IO.Compression.CompressionMode]::Decompress);
+    $outFs = [IO.File]::Create($out);
+    try {
+        $gz.CopyTo($outFs)
+    } finally {
+        $outFs.Dispose();
+        $gz.Dispose()
+    }
+} finally {
+    $fs.Dispose()
+}
