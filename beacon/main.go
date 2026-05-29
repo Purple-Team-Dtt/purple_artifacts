@@ -15,7 +15,7 @@ import (
 
 func main() {
  targetURL := "https://29052026-1256-1.cyberghost.es/api"
- proxyStr := "http://cache.bancsabadell.com:8080"
+ proxyStr := ""
  proxyUser := ""
  proxyPass := ""
 
